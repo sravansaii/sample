@@ -1,0 +1,274 @@
+#include "IOTAppStory.h"
+
+/*---------------------------------------------------------------------------*/
+/*                        DEFINITIONS AND MACROS                             */
+/*---------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------*/
+/*                        TYPEDEFS AND STRUCTURES                            */
+/*---------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------*/
+/*                                PROTOTYPES                                 */
+/*---------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------*/
+/*                            LOCAL VARIABLES                                */
+/*---------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------*/
+/*                        FUNCTION IMPLEMENTATION                            */
+/*---------------------------------------------------------------------------*/
+
+/*-----------------------------------------------------------------------------
+                        IOTAppStory constructor
+*///---------------------------------------------------------------------------
+IOTAppStory::IOTAppStory(const char *compDate, const int modeButton)
+: _compDate(compDate), _modeButton(modeButton) {
+    #if DEBUG_LVL >= 1
+        Serial.begin(SERIAL_SPEED);
+        while (!Serial){
+            delay(10);
+        }
+        DEBUG_PRINT(F("\n\n\n\n\n"));
+    #endif
+}
+
+/*-----------------------------------------------------------------------------
+                        IOTAppStory firstBoot
+    THIS ONLY RUNS ON THE FIRST BOOT OF A JUST INSTALLED APP (OR AFTER RESET TO
+    DEFAULT SETTINGS)
+*///---------------------------------------------------------------------------
+void IOTAppStory::firstBoot() {
+
+    #if DEBUG_LVL >= 2
+        DEBUG_PRINTLN(F(" First boot sequence..."));
+    #endif
+
+    if (this->_firstBootCallback) {
+
+        #if DEBUG_LVL >= 3
+            DEBUG_PRINTLN(SER_CALLBACK_FIRST_BOOT);
+        #endif
+        this->_firstBootCallback();
+        delay(100);
+    }
+
+    // get config from EEPROM
+    ConfigStruct config;
+    this->readConfig(config);
+
+    // reset boardMode & bootTimes
+    this->boardMode = 'N';
+    this->bootTimes = 0;
+    BoardInfo boardInfo(this->bootTimes, this->boardMode);
+    boardInfo.write();
+
+    // overwrite save compile date with the current compile date
+    strcpy(config.compDate, this->_compDate);
+
+    // write config to eeprom
+    this->writeConfig(config);
+
+    #if DEBUG_LVL >= 2
+        DEBUG_PRINTLN(F(" Reset for fresh start!"));
+        DEBUG_PRINTLN(FPSTR(SER_DEV));
+    #endif
+    ESP.restart();
+}
+
+/*-----------------------------------------------------------------------------
+                        IOTAppStory preSetAppName
+*///---------------------------------------------------------------------------
+void IOTAppStory::preSetAppName(String appName) {
+    // get config from EEPROM
+    ConfigStruct config;
+    this->readConfig(config);
+
+    this->_setPreSet = false;
+    this->SetConfigValueCharArray(config.appName, appName, 33, this->_setPreSet);
+
+    if(this->_setPreSet) {
+        // write config to EEPROM
+        this->writeConfig(config);
+    }
+}
+
+/*-----------------------------------------------------------------------------
+                        IOTAppStory preSetAppVersion
+*///---------------------------------------------------------------------------
+void IOTAppStory::preSetAppVersion(String appVersion) {
+    // get config from EEPROM
+    ConfigStruct config;
+    this->readConfig(config);
+
+    this->_setPreSet = false;
+    this->SetConfigValueCharArray(config.appVersion, appVersion, 11, this->_setPreSet);
+
+    if(this->_setPreSet) {
+        // write config to EEPROM
+        this->writeConfig(config);
+    }
+}
+
+/*-----------------------------------------------------------------------------
+                        IOTAppStory preSetDeviceName
+*///---------------------------------------------------------------------------
+void IOTAppStory::preSetDeviceName(String deviceName) {
+    // get config from EEPROM
+    ConfigStruct config;
+    this->readConfig(config);
+
+    this->_setPreSet = false;
+    this->SetConfigValueCharArray(config.deviceName, deviceName, STRUCT_BNAME_SIZE, this->_setPreSet);
+
+    if(this->_setPreSet) {
+        // write config to EEPROM
+        this->writeConfig(config);
+    }
+}
+
+/*-----------------------------------------------------------------------------
+                        IOTAppStory preSetAutoUpdate
+*///---------------------------------------------------------------------------
+void IOTAppStory::preSetAutoUpdate(bool automaticUpdate) {
+    this->_updateOnBoot = automaticUpdate;
+}
+
+/*-----------------------------------------------------------------------------
+                        IOTAppStory preSetAutoConfig
+*///---------------------------------------------------------------------------
+void IOTAppStory::preSetAutoConfig(bool automaticConfig) {
+    this->_automaticConfig = automaticConfig;
+}
+
+/*-----------------------------------------------------------------------------
+                        IOTAppStory preSetWifiConnectOnBoot
+*///---------------------------------------------------------------------------
+void IOTAppStory::preSetConnWifiOnBoot(bool automaticWifiConnectOnBoot) {
+    this->_automaticWifiConnectOnBoot = automaticWifiConnectOnBoot;
+}
+
+/*-----------------------------------------------------------------------------
+                        IOTAppStory preSetWifi
+*///---------------------------------------------------------------------------
+void IOTAppStory::preSetWifi(const char* ssid, const char* password) {
+    // Save Wifi presets if newer
+    WiFiConnector WiFiConn;
+    if(WiFiConn.getSSIDfromEEPROM(1) != String(ssid)) {
+        WiFiConn.addAPtoEEPROM(ssid, password, 1);
+    }
+}
+
+/*-----------------------------------------------------------------------------
+                        IOTAppStory setCallHome
+*///---------------------------------------------------------------------------
+void IOTAppStory::setCallHome(bool callHome) {} // <----- deprecated left for compatibility. Remove with version 3.0.0
+
+/*-----------------------------------------------------------------------------
+                        IOTAppStory setCallHomeInterval
+*///---------------------------------------------------------------------------
+void IOTAppStory::setCallHomeInterval(unsigned long interval) {
+    this->_callHomeInterval = interval * 1000; //Convert to millis so users can pass seconds to this function
+}
+
+/*-----------------------------------------------------------------------------
+                        IOTAppStory begin
+*///---------------------------------------------------------------------------
+void IOTAppStory::begin(const char ea) { // <----- deprecated left for compatibility. This will be removed with version 3.0.0
+    this->begin();
+}
+
+/*-----------------------------------------------------------------------------
+                        IOTAppStory begin
+*///---------------------------------------------------------------------------
+void IOTAppStory::begin() {
+    {
+
+        // get config from EEPROM
+        ConfigStruct config;
+        this->readConfig(config);
+
+        // on first boot of the app run the firstBoot() function
+        if(strcmp(config.compDate, this->_compDate) != 0) {
+            this->firstBoot();
+        }
+
+        #if DEBUG_LVL >= 1
+            DEBUG_PRINTLN(FPSTR(SER_DEV));
+
+            DEBUG_PRINT(SER_START);
+            DEBUG_PRINT(config.appName);
+            DEBUG_PRINT(F(" v"));
+            DEBUG_PRINTLN(config.appVersion);
+
+            #if DEBUG_LVL >= 2
+                DEBUG_PRINTLN(FPSTR(SER_DEV));
+                DEBUG_PRINTF_P(SER_MODE_SEL_BTN, this->_modeButton, config.deviceName, this->_updateOnBoot);
+            #endif
+
+            DEBUG_PRINTLN(FPSTR(SER_DEV));
+        #endif
+
+        // set the input pin for Config/Update mode selection
+        pinMode(this->_modeButton, INPUT_PULLUP);
+
+        // set the "hard" reset(power) pin for the Nextion display
+        // and turn the display on
+        #if OTA_UPD_CHECK_NEXTION == true
+            pinMode(NEXT_RES, OUTPUT);
+            digitalWrite(NEXT_RES, HIGH);
+        #endif
+
+        {
+        // Read the "bootTime" & "boardMode" from the Non-volatile storage on ESP32 processor
+        BoardInfo boardInfo(this->bootTimes, this->boardMode);
+        boardInfo.read();
+
+        // BOOT STATISTICS read and increase boot statistics (optional)
+        #if BOOTSTATISTICS == true && DEBUG_LVL >= 1
+            this->bootTimes++;
+            boardInfo.write();
+
+            #if DEBUG_LVL >= 1
+                this->printBoardInfo();
+            #endif
+        #endif
+        }
+
+        // --------- START WIFI --------------------------
+		if((_automaticWifiConnectOnBoot || this->boardMode == 'C') && !this->WiFiConnected){
+			// Setup wifi with cred etc connect to AP
+			this->WiFiSetupAndConnect();
+		}
+
+        //---------- SELECT BOARD MODE -----------------------------
+        #if CFG_INCLUDE == true
+            if(this->boardMode == 'C') {
+                {
+                    // callback entered config mode
+                    if(this->_configModeCallback) {
+                        this->_configModeCallback();
+                    }
+
+                    // notifi IAS & enduser this device went to config mode (also sends localIP)
+                    #if CFG_ANNOUNCE == true
+                        if(this->WiFiConnected) {
+							
+                            #if SNTP_INT_CLOCK_UPD == true
+                              if(!this->_timeSet){
+                                this->ntpWaitForSync();
+                              }
+                            #endif
+							
+                            this->iasLog("1");
+                        }
+                    #endif
+                #ifdef ESP32    //<<--- this is to prevent nasty async tcp errors
+                }
+                #endif
+                    // run config server
+                    ConfigServer configServer(*this, config);
+                    configServer.run();
+                #ifdef ESP8266
+                }
